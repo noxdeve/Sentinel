@@ -1,0 +1,181 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Vazirmatn", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Vazirmatn", "Space Grotesk", "Inter", ui-sans-serif, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --color-ink-950: #06070a;
+  --color-ink-900: #0a0c11;
+  --color-ink-850: #0e1118;
+  --color-ink-800: #131722;
+  --color-ink-700: #1a2030;
+  --color-ink-600: #263048;
+
+  --color-accent: #34e39b;
+  --color-accent-strong: #6ff2b8;
+  --color-accent-deep: #0d5c3a;
+  --color-danger: #fb7185;
+  --color-warn: #fbbf24;
+  --color-violet: #a78bfa;
+
+  --shadow-glow: 0 0 44px -10px rgba(52, 227, 155, 0.4);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  background: #06070a;
+}
+
+body {
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: rgba(52, 227, 155, 0.28);
+  color: #eafff5;
+}
+
+/* ------- scrollbars ------- */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 99px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ------- textures ------- */
+.noise::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.05'/%3E%3C/svg%3E");
+}
+
+.bg-grid {
+  background-image:
+    linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px);
+  background-size: 44px 44px;
+}
+
+@keyframes float-y {
+  0%,
+  100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-14px);
+  }
+}
+.float-y {
+  animation: float-y 7s ease-in-out infinite;
+}
+
+@keyframes shake {
+  10%,
+  90% {
+    transform: translateX(-1px);
+  }
+  20%,
+  80% {
+    transform: translateX(2px);
+  }
+  30%,
+  50%,
+  70% {
+    transform: translateX(-4px);
+  }
+  40%,
+  60% {
+    transform: translateX(4px);
+  }
+}
+.shake {
+  animation: shake 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+}
+
+/* range slider */
+[dir="rtl"] input[type="range"] {
+  background: linear-gradient(
+    to left,
+    #34e39b 0%,
+    #34e39b var(--fill, 50%),
+    rgba(255, 255, 255, 0.08) var(--fill, 50%),
+    rgba(255, 255, 255, 0.08) 100%
+  );
+}
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  border-radius: 99px;
+  background: linear-gradient(
+    to right,
+    #34e39b 0%,
+    #34e39b var(--fill, 50%),
+    rgba(255, 255, 255, 0.08) var(--fill, 50%),
+    rgba(255, 255, 255, 0.08) 100%
+  );
+  outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #0a0c11;
+  border: 2px solid #34e39b;
+  box-shadow: 0 0 16px rgba(52, 227, 155, 0.5);
+  cursor: pointer;
+  transition: transform 0.15s ease;
+}
+input[type="range"]::-webkit-slider-thumb:hover {
+  transform: scale(1.15);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #0a0c11;
+  border: 2px solid #34e39b;
+  box-shadow: 0 0 16px rgba(52, 227, 155, 0.5);
+  cursor: pointer;
+}
+.logo {
+  width: 84px;
+  height: auto;
+}
+
+/* Persian text sits lower and needs a little more breathing room */
+[dir="rtl"] body {
+  line-height: 1.75;
+}
+[dir="rtl"] .font-mono {
+  letter-spacing: 0;
+}
+@media (min-width: 640px) {
+  .logo {
+    width: 100px;
+  }
+  header {
+    margin-top: 15px ;
+  }
+}
