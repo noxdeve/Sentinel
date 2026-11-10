@@ -1,99 +1,153 @@
 # Sentinel
 
-A local-first, encrypted password vault built with **Tauri 2**, **React 19** and
-**TypeScript**. Secrets never leave the device: the master password is stretched
-with Argon2id into a 256-bit key that encrypts the entire vault with
-AES-256-GCM before it is written to SQLite.
+<p align="center">
+  <strong>A secure, offline-first password manager.</strong>
+  <br />
+  Built with Rust and Tauri for Linux and Android.
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="MIT License" />
+  <img src="https://img.shields.io/badge/Rust-Powered-orange?logo=rust" alt="Rust" />
+  <img src="https://img.shields.io/badge/Tauri-v2-blue?logo=tauri" alt="Tauri" />
+  <img src="https://img.shields.io/badge/Platform-Linux%20%7C%20Android-lightgrey" alt="Platforms" />
+</p>
+
+---
+
+## Overview
+
+Sentinel is a privacy-focused password manager designed to provide secure, local credential storage without relying on cloud services.
+
+Built with Rust and Tauri, Sentinel combines a lightweight application architecture with modern cryptographic technologies to keep sensitive information protected and under the user's control.
+
+**Your credentials. Your device. Your control.**
 
 ## Features
 
-- **Master-password unlock** — Argon2id verification; the password itself is
-  never stored.
-- **Encrypted at rest** — the whole vault payload is sealed with AES-256-GCM
-  (fresh random nonce on every write). Only the derived key is held in memory,
-  and only while unlocked.
-- **Password intelligence** — strength scoring, reuse detection, stale-password
-  detection and a weighted vault health score.
-- **Watchtower** — a security audit view that flags weak, reused, breached and
-  stale credentials, with one-click rotation.
-- **Built-in generator** — cryptographically secure (rejection-sampled, no
-  modulo bias) with configurable length and character sets.
-- **Everyday ergonomics** — categories, favorites, search (`/`), keyboard
-  navigation, auto-lock on idle, and automatic clipboard wiping.
-- **Offline web preview** — running `npm run dev` outside the Tauri shell falls
-  back to `localStorage`, so the UI is fully explorable in a browser.
+- **Encrypted Storage** — Protect sensitive credentials with authenticated encryption.
+- **Offline-first** — Access and manage your passwords without an internet connection.
+- **Local Data Ownership** — Keep your credential data stored locally.
+- **Secure Key Derivation** — Use Argon2 for password-based key derivation.
+- **Lightweight** — Powered by Rust and Tauri.
+- **Cross-platform** — Designed for Linux and Android.
 
-## Security model
+## Technology Stack
 
-| Concern            | Approach                                                             |
-| ------------------ | -------------------------------------------------------------------- |
-| Password storage   | Argon2id PHC hash (`user.password`); the plaintext is never persisted |
-| Vault key          | `Argon2id(master_password, random 16-byte salt)` → 32 bytes           |
-| Vault payload      | `AES-256-GCM(key, JSON(items))` with a fresh random nonce per save    |
-| Key lifetime       | Cached in backend memory only while unlocked; zeroed on lock          |
-| Locking            | Manual lock, auto-lock on inactivity, or app restart                  |
+| Technology | Role |
+|---|---|
+| Rust | Core application logic |
+| Tauri | Application framework |
+| React | User interface |
+| TypeScript | Frontend development |
+| SQLite | Local data storage |
+| Argon2 | Key derivation |
+| AES-256-GCM | Authenticated encryption |
 
-The database lives in the platform app-data directory (`vault.db`). On first run
-a legacy `user.db` from the working directory is migrated automatically.
+## Security & Privacy
 
-## Getting started
+Security and privacy are fundamental principles of Sentinel.
+
+- Credentials are encrypted before persistent storage.
+- Password-based key derivation helps protect encryption keys.
+- Sensitive data is managed locally.
+- Core password management does not require cloud connectivity.
+
+Sentinel is designed with a local-first security model. However, it has not been independently audited, and users should evaluate its security before relying on it for critical credentials.
+
+## Supported Platforms
+
+| Platform | Availability |
+|---|---|
+| Linux | Development builds |
+| Android | Development builds |
+
+Pre-built packages are published through GitHub Releases.
+
+## Installation
+
+### Download
+
+Visit the Releases page to find available builds:
+
+[**Download Sentinel →**](https://github.com/noxdeve/Sentinel/releases)
+
+### Build from Source
+
+#### Prerequisites
+
+- Git
+- Rust (stable)
+- Node.js
+- npm
+- Tauri development dependencies
+
+#### Clone the repository
+
+```bash
+git clone https://github.com/noxdeve/Sentinel.git
+cd Sentinel
+```
+
+#### Install dependencies
 
 ```bash
 npm install
-npm run tauri dev      # desktop app (Rust backend + encrypted vault)
 ```
 
-Browser-only preview of the UI (no backend, uses `localStorage`):
+#### Run in development mode
 
 ```bash
-npm run dev
+npm run tauri dev
 ```
 
-## Scripts
-
-| Command             | Description                                  |
-| ------------------- | -------------------------------------------- |
-| `npm run dev`       | Vite dev server for the frontend             |
-| `npm run build`     | Type-check-free production build of the UI   |
-| `npm run tauri dev` | Run the full desktop app                     |
-| `npm run tauri build` | Package the desktop app                    |
-| `npm run typecheck` | `tsc --noEmit`                               |
-| `npm test`          | Vitest in watch mode                         |
-| `npm run test:run`  | Vitest once                                  |
-| `npm run lint`      | ESLint                                       |
-| `npm run format`    | Prettier                                     |
-
-Rust tests (crypto round-trips, hashing) live alongside the backend:
+#### Build the application
 
 ```bash
-cd src-tauri && cargo test
+npm run tauri build
 ```
 
-## Project layout
+> Platform-specific dependencies may be required depending on your operating system and target architecture.
 
-```
-src/
-  components/       UI: lock screen, sidebar, list, detail, generator, …
-  lib/backend.ts    Typed bridge to the Tauri commands + isTauri() detection
-  lib/clipboard.ts  Clipboard copy with timed wiping
-  data.ts           Domain types, scoring, secure generator
-  store.tsx         Vault state, persistence, toasts, locking
-src-tauri/
-  src/lib.rs        Commands: auth, encrypted load/save, lock
-```
+## Project Status
 
-## Backend commands
+Sentinel is currently under active development.
 
-| Command          | Purpose                                             |
-| ---------------- | --------------------------------------------------- |
-| `user_status`    | Whether a master account exists                     |
-| `add_user`       | Create the account and an empty encrypted vault     |
-| `check_password` | Verify the password and cache the derived key       |
-| `get_username`   | Display name of the account                         |
-| `load_items`     | Decrypt and return the vault payload (JSON)         |
-| `save_items`     | Encrypt and persist the vault payload               |
-| `lock_vault`     | Zero and drop the in-memory key                     |
+The project aims to provide a reliable, lightweight, and privacy-focused password management experience across supported platforms.
+
+Features and implementation details may evolve between releases.
+
+## Roadmap
+
+- [x] Rust-based application core
+- [x] Local database integration
+- [x] Password-based key derivation
+- [x] Encrypted credential storage
+- [x] Linux support
+- [x] Android support
+- [ ] Comprehensive security audit
+- [ ] Automated security testing
+- [ ] Improved backup and recovery workflows
+- [ ] Additional platform support
+
+## Contributing
+
+Contributions, bug reports, and suggestions are welcome.
+
+If you encounter a bug or have an idea for improvement, feel free to open an issue or submit a pull request.
 
 ## License
 
-MIT
+Sentinel is licensed under the MIT License.
+
+See the [LICENSE](LICENSE) file for details.
+
+---
+
+<p align="center">
+  <strong>Sentinel</strong>
+  <br />
+  Privacy by design. Security by default.
+  <br /><br />
+  Developed by <a href="https://github.com/noxdeve">noxdeve</a>
+</p>
