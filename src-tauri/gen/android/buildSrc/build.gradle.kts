@@ -14,6 +14,8 @@ gradlePlugin {
 repositories {
     google()
     mavenCentral()
+    // Fallback for networks where Google Maven (dl.google.com) is unreachable.
+    maven("https://maven.aliyun.com/repository/google")
 }
 
 dependencies {
