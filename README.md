@@ -26,6 +26,7 @@ Built with Rust and Tauri, Sentinel combines a lightweight application architect
 ## Features
 
 - **Encrypted Storage** — Protect sensitive credentials with authenticated encryption.
+- **Biometric Unlock** — On Android, unlock with fingerprint or face instead of typing the master password.
 - **Offline-first** — Access and manage your passwords without an internet connection.
 - **Local Data Ownership** — Keep your credential data stored locally.
 - **Secure Key Derivation** — Use Argon2 for password-based key derivation.

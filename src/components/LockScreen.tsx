@@ -8,9 +8,17 @@ import {
   KeyRound,
   User,
   Loader2,
+  Fingerprint,
 } from "lucide-react";
 import { useVault } from "../vault-context";
 import { createAccount, isTauri, unlockVault, userExists } from "../lib/backend";
+import {
+  biometricErrorCode,
+  forgetBiometricCredential,
+  getBiometryStatus,
+  hasBiometricCredential,
+  unlockWithBiometric,
+} from "../lib/biometric";
 import { cn } from "../utils/cn";
 
 async function checkUser(): Promise<boolean> {
@@ -31,18 +39,30 @@ export default function LockScreen() {
   const [error, setError] = React.useState("");
   const [busy, setBusy] = React.useState(false);
   const tauri = isTauri();
+
   // Outside the Tauri shell there is no backend to authenticate against;
   // start straight on the unlock form for the local browser-preview vault.
-  const [userStatus, setUserStatus] = React.useState<boolean | null>(
-    tauri ? null : true,
-  );
-  const errorTimer = React.useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
+  const [userStatus, setUserStatus] = React.useState<boolean | null>(tauri ? null : true);
+  // True only when the device has usable biometrics *and* a wrapped master
+  // password is already stored, so the button never leads to a dead prompt.
+  const [bioReady, setBioReady] = React.useState(false);
+  const errorTimer = React.useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   React.useEffect(() => {
     if (tauri) checkUser().then(setUserStatus);
     return () => clearTimeout(errorTimer.current);
+  }, [tauri]);
+
+  React.useEffect(() => {
+    if (!tauri) return;
+    let cancelled = false;
+    void getBiometryStatus().then((status) => {
+      if (cancelled) return;
+      setBioReady(Boolean(status) && hasBiometricCredential());
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [tauri]);
 
   const flashError = (message: string) => {
@@ -71,6 +91,44 @@ export default function LockScreen() {
     } catch (e) {
       flashError("تأیید رمز عبور ممکن نشد. دوباره تلاش کنید.");
       console.error(e);
+    }
+  }
+
+  async function biometricUnlock() {
+    if (busy) return;
+    setError("");
+    setBusy(true);
+    try {
+      const password = await unlockWithBiometric();
+      if (!password) {
+        setBusy(false);
+        setBioReady(false);
+        flashError("ورود بیومتریک در دسترس نیست.");
+        return;
+      }
+      const result = await unlockVault(password);
+      if (result) {
+        setTimeout(unlock, 500);
+        return;
+      }
+      // The stored password no longer matches this vault (e.g. it was
+      // re-created); drop it so the user is not stuck on a failing prompt.
+      forgetBiometricCredential();
+      setBioReady(false);
+      setBusy(false);
+      flashError("ورود بیومتریک نامعتبر شد. با رمز اصلی وارد شوید.");
+    } catch (e) {
+      const code = biometricErrorCode(e);
+      if (code === "biometryLockout") {
+        flashError("ورود بیومتریک موقتاً قفل شده است.");
+      } else if (code !== "userCancel" && code !== "systemCancel") {
+        console.error("Biometric unlock failed", e);
+        flashError("ورود بیومتریک ممکن نشد. با رمز اصلی وارد شوید.");
+      }
+      // A changed enrollment invalidates the key; the helper already dropped
+      // the payload, so hide the button instead of offering it again.
+      if (!hasBiometricCredential()) setBioReady(false);
+      setBusy(false);
     }
   }
 
@@ -103,12 +161,6 @@ export default function LockScreen() {
       setBusy(false);
     }
   }
-
-  const statusText = busy
-    ? "ساخت کلیدها · رمزگشایی گاوصندوق…"
-    : error
-      ? error
-      : "همه‌چیز امن است.";
 
   return (
     <motion.div
@@ -150,55 +202,73 @@ export default function LockScreen() {
             بررسی گاوصندوق…
           </div>
         ) : userStatus ? (
-          <div
-            className={cn(
-              "mt-10 w-full rounded-2xl border border-white/[0.07] bg-ink-850/80 p-2 shadow-2xl shadow-black/60 backdrop-blur-xl transition-shadow duration-300",
-              busy && "shadow-glow",
-              error && "shake border-danger/40",
-            )}
-          >
-            <div className="flex items-center gap-1">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/[0.04]">
-                {busy ? (
-                  <Loader2 className="h-5 w-5 animate-spin text-accent" />
-                ) : (
-                  <Lock className="h-5 w-5 text-zinc-400" strokeWidth={1.8} />
-                )}
-              </div>
-              <input
-                type={show ? "text" : "password"}
-                autoFocus
-                value={pw}
-                disabled={busy}
-                aria-label="رمز اصلی"
-                aria-invalid={Boolean(error)}
-                onChange={(e) => setPw(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && submit()}
-                placeholder="رمز اصلی"
-                className="h-12 min-w-0 flex-1 bg-transparent px-3 font-mono text-sm text-zinc-100 outline-none placeholder:font-sans placeholder:text-zinc-500"
-              />
-              <button
-                type="button"
-                onClick={() => setShow((s) => !s)}
-                aria-label={show ? "پنهان کردن رمز" : "نمایش رمز"}
-                className="flex h-10 w-10 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-white/[0.05] hover:text-zinc-200 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
-                tabIndex={-1}
-              >
-                {show ? <EyeOff size={16} /> : <Eye size={16} />}
-              </button>
-              <button
-                type="button"
-                onClick={submit}
-                disabled={busy}                  aria-label="باز کردن گاوصندوق"
-                className="group flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-ink-950 transition-all duration-200 hover:bg-accent-strong hover:shadow-glow focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none active:scale-95 disabled:opacity-70"
-              >
-                <ArrowLeft
-                  size={18}
-                  className="transition-transform duration-200 group-hover:-translate-x-0.5"
+          <div className="mt-10 flex w-full flex-col items-center gap-3">
+            <div
+              className={cn(
+                "w-full rounded-2xl border border-white/[0.07] bg-ink-850/80 p-2 shadow-2xl shadow-black/60 backdrop-blur-xl transition-shadow duration-300",
+                busy && "shadow-glow",
+                error && "shake border-danger/40",
+              )}
+            >
+              <div className="flex items-center gap-1">
+                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/[0.04]">
+                  {busy ? (
+                    <Loader2 className="h-5 w-5 animate-spin text-accent" />
+                  ) : (
+                    <Lock className="h-5 w-5 text-zinc-400" strokeWidth={1.8} />
+                  )}
+                </div>
+                <input
+                  type={show ? "text" : "password"}
+                  autoFocus
+                  value={pw}
+                  disabled={busy}
+                  aria-label="رمز اصلی"
+                  aria-invalid={Boolean(error)}
+                  onChange={(e) => setPw(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && submit()}
+                  placeholder="رمز اصلی"
+                  className="h-12 min-w-0 flex-1 bg-transparent px-3 font-mono text-sm text-zinc-100 outline-none placeholder:font-sans placeholder:text-zinc-500"
                 />
-              </button>
+                <button
+                  type="button"
+                  onClick={() => setShow((s) => !s)}
+                  aria-label={show ? "پنهان کردن رمز" : "نمایش رمز"}
+                  className="flex h-10 w-10 items-center justify-center rounded-lg text-zinc-500 transition-colors hover:bg-white/[0.05] hover:text-zinc-200 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none"
+                  tabIndex={-1}
+                >
+                  {show ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+                <button
+                  type="button"
+                  onClick={submit}
+                  disabled={busy}
+                  aria-label="باز کردن گاوصندوق"
+                  className="group flex h-12 w-12 items-center justify-center rounded-xl bg-accent text-ink-950 transition-all duration-200 hover:bg-accent-strong hover:shadow-glow focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none active:scale-95 disabled:opacity-70"
+                >
+                  <ArrowLeft
+                    size={18}
+                    className="transition-transform duration-200 group-hover:-translate-x-0.5"
+                  />
+                </button>
+              </div>
             </div>
-          </div>
+
+
+                {bioReady && (
+
+              <button
+                type="button"
+                onClick={biometricUnlock}
+                disabled={busy}
+                aria-label="ورود با اثر انگشت"
+                className="inline-flex items-center justify-center mt-4 gap-2 rounded-full border px-6.5 py-3.5 transition-colors duration-30 border-white/[0.06] bg-white/[0.03] text-zinc-400 text-[12px] font-medium"
+              >
+                <Fingerprint size={16} />
+                ورود با اثر انگشت
+                    </button>
+              )}
+                </div>
         ) : (
           <section className="w-full">
             <div
@@ -237,13 +307,6 @@ export default function LockScreen() {
               )}
             >
               <div className="flex items-center gap-1">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-white/[0.04]">
-                  {busy ? (
-                    <Loader2 className="h-5 w-5 animate-spin text-accent" />
-                  ) : (
-                    <Lock className="h-5 w-5 text-zinc-400" strokeWidth={1.8} />
-                  )}
-                </div>
                 <input
                   type={show ? "text" : "password"}
                   value={pw}
@@ -307,19 +370,7 @@ export default function LockScreen() {
           </section>
         )}
 
-        <div
-          role="status"
-          aria-live="polite"
-          className={cn(
-            "mt-4 flex items-center gap-2 rounded-full border px-3.5 py-1.5 transition-colors duration-300",
-            error
-              ? "border-danger/30 bg-danger/10 text-danger"
-              : "border-white/[0.06] bg-white/[0.03] text-zinc-400",
-          )}
-        >
-          <KeyRound size={12} />
-          <span className="text-[11px] font-medium">{statusText}</span>
-        </div>
+
       </motion.div>
 
       {/* footer */}
@@ -328,7 +379,7 @@ export default function LockScreen() {
         <span className="h-1 w-1 rounded-full bg-zinc-600" />
         <span>ذخیره محلی</span>
         <span className="h-1 w-1 rounded-full bg-zinc-600" />
-        <span>v0.5.0</span>
+        <span>v1.0.0</span>
       </div>
     </motion.div>
   );

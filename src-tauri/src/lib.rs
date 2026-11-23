@@ -1,9 +1,11 @@
 //! Sentinel — encrypted password vault.
 //!
-//! The master password is never stored. It is hashed with Argon2id for
-//! verification and, using a separate random salt, stretched into a 256-bit
-//! key that encrypts the whole vault payload with AES-256-GCM. Only the
-//! derived key lives in memory, and only while the vault is unlocked.
+//! The master password is never stored in the clear. It is hashed with Argon2id
+//! for verification and, using a separate random salt, stretched into a 256-bit
+//! key that encrypts the whole vault payload with AES-256-GCM. Only the derived
+//! key lives in memory, and only while the vault is unlocked. On mobile an
+//! encrypted copy of the password may additionally be kept behind the system
+//! biometric prompt so the vault can be unlocked without typing it.
 
 use std::path::PathBuf;
 use std::sync::Mutex;
@@ -335,9 +337,10 @@ fn lock_vault(state: State<'_, VaultState>) -> Result<(), String> {
     Ok(())
 }
 
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .manage(VaultState::default())
         .invoke_handler(tauri::generate_handler![
@@ -348,10 +351,16 @@ pub fn run() {
             load_items,
             save_items,
             lock_vault
-        ])
+        ]);
+
+    #[cfg(mobile)]
+    let builder = builder.plugin(tauri_plugin_biometric::init());
+
+    builder
         .run(tauri::generate_context!())
         .expect("error while running application");
 }
+
 
 #[cfg(test)]
 mod tests {

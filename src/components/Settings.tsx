@@ -1,8 +1,25 @@
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, Settings2, Lock, Timer, ClipboardCopy, Dices } from "lucide-react";
+import {
+  X,
+  Settings2,
+  Lock,
+  Timer,
+  ClipboardCopy,
+  Dices,
+  Fingerprint,
+  Loader2,
+} from "lucide-react";
 import { useVault } from "../vault-context";
 import { useEscape, useFocusTrap, useScrollLock } from "../hooks";
+import { unlockVault } from "../lib/backend";
+import {
+  enrollBiometric,
+  forgetBiometricCredential,
+  getBiometryStatus,
+  hasBiometricCredential,
+} from "../lib/biometric";
+import { cn } from "../utils/cn";
 
 function Row({
   icon,
@@ -37,13 +54,79 @@ const selectClass =
   "h-10 w-full rounded-lg border border-white/[0.08] bg-ink-900 px-3 text-[13px] text-zinc-100 outline-none transition-all focus:border-accent/40 focus:shadow-[0_0_0_3px_rgba(52,227,155,0.08)]";
 
 export default function SettingsPanel() {
-  const { settings, setSettings, settingsOpen, setSettingsOpen, lock } = useVault();
+  const { settings, setSettings, settingsOpen, setSettingsOpen, lock, notify } =
+    useVault();
   const panelRef = React.useRef<HTMLDivElement>(null);
 
-  const close = React.useCallback(() => setSettingsOpen(false), [setSettingsOpen]);
+  const [bioAvailable, setBioAvailable] = React.useState(false);
+  const [bioEnabled, setBioEnabled] = React.useState(() => hasBiometricCredential());
+  const [bioPassword, setBioPassword] = React.useState("");
+  const [bioError, setBioError] = React.useState("");
+  const [bioBusy, setBioBusy] = React.useState(false);
+  const [enrolling, setEnrolling] = React.useState(false);
+
+  const close = React.useCallback(() => {
+    setSettingsOpen(false);
+    setBioPassword("");
+    setBioError("");
+    setEnrolling(false);
+  }, [setSettingsOpen]);
   useEscape(settingsOpen, close);
   useScrollLock(settingsOpen);
   useFocusTrap(settingsOpen, panelRef);
+
+  // Re-check the device each time the panel opens: biometrics can be enrolled,
+  // removed, or locked out while the app is running.
+  React.useEffect(() => {
+    if (!settingsOpen) return;
+    let cancelled = false;
+    void getBiometryStatus().then((status) => {
+      if (!cancelled) setBioAvailable(Boolean(status));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [settingsOpen]);
+
+  async function enableBiometric(event: React.FormEvent) {
+    event.preventDefault();
+    if (bioBusy || !bioPassword) return;
+    setBioBusy(true);
+    setBioError("");
+    try {
+      // Verify first so a typo can never be wrapped and stored as the
+      // biometric credential.
+      if (!(await unlockVault(bioPassword))) {
+        setBioError("رمز اصلی نادرست است.");
+        return;
+      }
+      const result = await enrollBiometric(bioPassword);
+      if (result === "enrolled") {
+        setBioEnabled(true);
+        setBioPassword("");
+        setEnrolling(false);
+        notify("ورود با اثر انگشت فعال شد");
+      } else if (result === "cancelled") {
+        setBioError("درخواست اثر انگشت لغو شد.");
+      } else {
+        setBioError("فعال‌سازی ورود بیومتریک ممکن نشد.");
+      }
+    } catch (error) {
+      console.error("Biometric enrollment failed", error);
+      setBioError("فعال‌سازی ورود بیومتریک ممکن نشد.");
+    } finally {
+      setBioBusy(false);
+    }
+  }
+
+  function disableBiometric() {
+    forgetBiometricCredential();
+    setBioEnabled(false);
+    setBioPassword("");
+    setEnrolling(false);
+    setBioError("");
+    notify("ورود با اثر انگشت غیرفعال شد");
+  }
 
   return (
     <AnimatePresence>
@@ -73,9 +156,7 @@ export default function SettingsPanel() {
                 <div className="flex h-8 w-8 items-center justify-center rounded-lg border border-accent/25 bg-accent/[0.08]">
                   <Settings2 size={15} className="text-accent" />
                 </div>
-                <h2 className="font-display text-base font-bold text-white">
-                  تنظیمات
-                </h2>
+                <h2 className="font-display text-base font-bold text-white">تنظیمات</h2>
               </div>
               <button
                 onClick={close}
@@ -154,6 +235,99 @@ export default function SettingsPanel() {
                   </span>
                 </div>
               </Row>
+
+              {(bioAvailable || bioEnabled) && (
+                <Row
+                  icon={<Fingerprint size={15} />}
+                  title="ورود با اثر انگشت"
+                  description="بدون تایپ رمز اصلی، گاوصندوق را با اثر انگشت یا چهره باز کنید."
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-[12px] text-zinc-400">
+                      {bioEnabled ? "فعال" : "غیرفعال"}
+                    </span>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={bioEnabled}
+                      aria-label="ورود با اثر انگشت"
+                      disabled={bioBusy}
+                      onClick={() => {
+                        if (bioEnabled) {
+                          disableBiometric();
+                        } else {
+                          setBioError("");
+                          setEnrolling(true);
+                        }
+                      }}
+                      className={cn(
+                        "relative h-6 w-11 rounded-full border transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-accent/50 focus-visible:outline-none disabled:opacity-60",
+                        bioEnabled
+                          ? "border-accent/40 bg-accent/80"
+                          : "border-white/[0.12] bg-white/[0.06]",
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all duration-200",
+                          bioEnabled ? "start-[calc(100%-1.375rem)]" : "start-0.5",
+                        )}
+                      />
+                    </button>
+                  </div>
+
+                  {enrolling && !bioEnabled && (
+                    <form onSubmit={enableBiometric} className="mt-3 space-y-2">
+                      <input
+                        type="password"
+                        value={bioPassword}
+                        disabled={bioBusy}
+                        autoFocus
+                        aria-label="رمز اصلی برای فعال‌سازی اثر انگشت"
+                        placeholder="رمز اصلی را وارد کنید"
+                        onChange={(e) => setBioPassword(e.target.value)}
+                        className="h-10 w-full rounded-lg border border-white/[0.08] bg-ink-900 px-3 font-mono text-[13px] text-zinc-100 outline-none transition-all placeholder:font-sans placeholder:text-zinc-500 focus:border-accent/40 focus:shadow-[0_0_0_3px_rgba(52,227,155,0.08)]"
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="submit"
+                          disabled={bioBusy || !bioPassword}
+                          className="flex h-9 flex-1 items-center justify-center gap-2 rounded-lg bg-accent text-[12px] font-bold text-ink-950 transition-all hover:bg-accent-strong active:scale-[0.98] disabled:opacity-60"
+                        >
+                          {bioBusy ? (
+                            <Loader2 size={14} className="animate-spin" />
+                          ) : (
+                            <Fingerprint size={14} />
+                          )}
+                          فعال‌سازی
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEnrolling(false);
+                            setBioPassword("");
+                            setBioError("");
+                          }}
+                          className="h-9 rounded-lg border border-white/[0.08] px-3 text-[12px] text-zinc-400 transition-colors hover:bg-white/[0.05] hover:text-zinc-200"
+                        >
+                          انصراف
+                        </button>
+                      </div>
+                      {bioError && (
+                        <p className="text-[11px] text-danger" role="alert">
+                          {bioError}
+                        </p>
+                      )}
+                    </form>
+                  )}
+
+                  {!enrolling && bioError && (
+                    <p className="mt-2 text-[11px] text-danger" role="alert">
+                      {bioError}
+                    </p>
+                  )}
+                </Row>
+              )}
 
               <div className="rounded-xl border border-white/[0.05] bg-white/[0.02] p-4">
                 <p className="text-[11px] leading-relaxed text-zinc-500">
